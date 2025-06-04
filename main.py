@@ -429,7 +429,7 @@ class MainApp:
                 "full_name": {"label": "ФИО*", "type": "entry", "required": True},
                 "address": {"label": "Адрес*", "type": "entry", "required": True},
                 "phone": {"label": "Телефон", "type": "entry", "required": False},
-                "email": {"label": "Email", "type": "entry", "required": False}
+                "email": {"label": "Email*", "type": "entry", "required": True}
             }
                 
         elif table == "employees":
@@ -465,7 +465,7 @@ class MainApp:
             fields = {
                 "mail_item_id": {"label": "Отправление*", "type": "combobox", "values": list(mail_items.keys()), "required": True},
                 "description": {"label": "Описание*", "type": "entry", "required": True},
-                "value": {"label": "Стоимость*", "type": "entry", "required": True}
+                "value": {"label": "Стоимость", "type": "entry", "required": False}
             }
             
             lookup_data = {"mail_item_id": mail_items}
@@ -552,11 +552,14 @@ class MainApp:
                         errors.append(f"Поле '{fields[field_name]['label']}' обязательно для заполнения")
                         continue
                     
-                    if field_name in ["weight", "tariff", "value"] and value:
-                        try:
-                            data[field_name] = float(value)
-                        except ValueError:
-                            errors.append(f"Некорректное числовое значение для '{fields[field_name]['label']}'")
+                    if field_name in ["weight", "tariff", "value"]:
+                        if value:
+                            try:
+                                data[field_name] = float(value)
+                            except ValueError:
+                                errors.append(f"Некорректное числовое значение для '{fields[field_name]['label']}'")
+                        else:
+                            data[field_name] = None
                     else:
                         data[field_name] = value
                         
