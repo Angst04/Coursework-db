@@ -9,8 +9,6 @@ class Database:
         try:
             self.connection = psycopg2.connect(
                 dbname="postgres",
-                # user="postgres",
-                # password="your_password",
                 host="localhost",
                 port="5432"
             )
@@ -143,7 +141,6 @@ class MainApp:
         self.trees = {}
         self.filters_frame = {}
         
-        # Таблицы с русскими названиями
         tables = [
             ("mail_types", "Типы отправлений"),
             ("recipients", "Адресаты"),
@@ -252,7 +249,6 @@ class MainApp:
         tree = self.trees[table]
         tree["show"] = "headings"
         
-        # Словари с русскими названиями столбцов
         russian_headers = {
             "mail_types": {
                 "id": "ID",
@@ -362,7 +358,6 @@ class MainApp:
         self.sort_columns[table] = f"{column} {direction}"
         self.load_table_data(table)
         
-        # Обновляем заголовок с учетом направления сортировки
         russian_headers = {
             "mail_types": {"id": "ID", "type_name": "Тип отправления", "description": "Описание"},
             "recipients": {"id": "ID", "full_name": "ФИО", "address": "Адрес", "phone": "Телефон", "email": "Email"},
@@ -434,7 +429,6 @@ class MainApp:
                 where_clauses.append("value <= %s")
                 params.append(value_to)
             
-            # Форматируем информацию об отправлении
             query = """
                 SELECT p.id, 
                        'Отпр. ' || mi.id || ' [' || mi.status || '] (' || r.full_name || ')' as mail_item_info,
@@ -531,7 +525,6 @@ class MainApp:
             }
                     
         elif table == "parcels":
-            # Используем специальный метод для получения отправлений
             mail_items = self.db.get_mail_items_for_parcels()
             
             fields = {
@@ -575,12 +568,10 @@ class MainApp:
                             
                         if isinstance(entries[colname], ttk.Combobox):
                             if colname in lookup_data:
-                                # Для статуса в отправлениях устанавливаем значение напрямую
                                 if table == "mail_items" and colname == "status":
                                     entries[colname].set(value)
                                     continue
                                     
-                                # Поиск отображаемого значения по ID
                                 for display_value, id_value in lookup_data[colname].items():
                                     if id_value == value:
                                         entries[colname].set(display_value)
@@ -615,7 +606,6 @@ class MainApp:
                         errors.append(f"Поле '{fields[field_name]['label']}' обязательно для заполнения")
                         continue
                     
-                    # Для статуса в отправлениях сохраняем значение напрямую
                     if table == "mail_items" and field_name == "status":
                         data[field_name] = value
                         continue
