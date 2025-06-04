@@ -36,10 +36,10 @@ class Database:
             messagebox.showerror("Ошибка запроса", f"Ошибка при получении данных из таблицы {table}:\n{str(e)}")
             return []
 
-    def get_lookup_data(self, table, display_columns):
+    def get_lookup_data_reverse(self, table, display_columns):
         try:
-            self.cursor.execute(f"SELECT id, {display_columns} FROM {table}")
-            return {row[0]: row[1] for row in self.cursor.fetchall()}
+            self.cursor.execute(f"SELECT {display_columns}, id FROM {table}")
+            return {str(row[0]): row[1] for row in self.cursor.fetchall()}
         except Exception as e:
             messagebox.showerror("Ошибка справочника", f"Ошибка при получении данных из справочника {table}:\n{str(e)}")
             return {}
@@ -121,15 +121,14 @@ class MainApp:
         self.current_record_id = None
         self.filters = {}
         self.sort_columns = {}
+        self.sort_direction = {}
 
-        # Создаем вкладки
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill='both', expand=True)
         
         self.tabs = {}
         self.trees = {}
         self.filters_frame = {}
-        self.sort_buttons = {}
         
         tables = [
             ("mail_types", "Типы отправлений"),
@@ -142,36 +141,27 @@ class MainApp:
         for table, title in tables:
             self._create_table_tab(table, title)
             self.load_table_data(table)
-            
-        # Создаем индексы
-        self.create_indexes()
 
     def _create_table_tab(self, table, title):
-        """Создает вкладку для таблицы с фильтрами и сортировкой"""
         tab = ttk.Frame(self.notebook)
         self.notebook.add(tab, text=title)
         self.tabs[table] = tab
         
-        # Фрейм для фильтров
-        filter_frame = ttk.LabelFrame(tab, text="Фильтры")
+        filter_frame = ttk.LabelFrame(tab, text="Фильтры и поиск")
         filter_frame.pack(fill='x', padx=5, pady=5)
         self.filters_frame[table] = filter_frame
         
-        # Фрейм для дерева
         tree_frame = ttk.Frame(tab)
         tree_frame.pack(fill='both', expand=True, padx=5, pady=5)
         
-        # Дерево
         tree = ttk.Treeview(tree_frame)
         tree.pack(fill='both', expand=True, side='left')
         
-        # Скроллбар
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
         scrollbar.pack(side='right', fill='y')
         tree.configure(yscrollcommand=scrollbar.set)
         self.trees[table] = tree
         
-        # Кнопки управления
         button_frame = ttk.Frame(tab)
         button_frame.pack(fill='x', padx=5, pady=5)
         
@@ -186,54 +176,26 @@ class MainApp:
         ttk.Button(button_frame, text="Обновить", 
                   command=lambda: self.load_table_data(table)).pack(side='right', padx=5)
         
-        # Настраиваем колонки
         self.configure_columns(table)
-        
-        # Привязываем событие выбора
         tree.bind("<<TreeviewSelect>>", self.on_tree_select)
         
-        # Инициализируем фильтры
         self.filters[table] = {}
         self.sort_columns[table] = None
-        
-        # Создаем фильтры
+        self.sort_direction[table] = {}
         self.create_filters(table)
 
     def create_filters(self, table):
-        """Создает элементы управления фильтрацией и сортировкой"""
         filter_frame = self.filters_frame[table]
         
-        if table == "mail_types":
-            ttk.Label(filter_frame, text="Тип отправления:").pack(side='left', padx=5)
-            entry = ttk.Entry(filter_frame, width=15)
-            entry.pack(side='left', padx=5)
-            self.filters[table]["type_name"] = entry
-            
-            self.sort_buttons[table] = ttk.Button(filter_frame, text="Сортировать по типу", 
-                                                  command=lambda: self.toggle_sort(table, "type_name"))
-            self.sort_buttons[table].pack(side='left', padx=5)
-
-        elif table == "recipients":
-            ttk.Label(filter_frame, text="ФИО:").pack(side='left', padx=5)
-            entry = ttk.Entry(filter_frame, width=15)
-            entry.pack(side='left', padx=5)
-            self.filters[table]["full_name"] = entry
-            
-            self.sort_buttons[table] = ttk.Button(filter_frame, text="Сортировать по ФИО", 
-                                                  command=lambda: self.toggle_sort(table, "full_name"))
-            self.sort_buttons[table].pack(side='left', padx=5)
-
-        elif table == "employees":
-            ttk.Label(filter_frame, text="ФИО:").pack(side='left', padx=5)
-            entry = ttk.Entry(filter_frame, width=15)
-            entry.pack(side='left', padx=5)
-            self.filters[table]["full_name"] = entry
-            
-            self.sort_buttons[table] = ttk.Button(filter_frame, text="Сортировать по дате приема", 
-                                                  command=lambda: self.toggle_sort(table, "hire_date"))
-            self.sort_buttons[table].pack(side='left', padx=5)
-
-        elif table == "mail_items":
+        ttk.Label(filter_frame, text="Поиск по текстовым полям:").pack(side='left', padx=5)
+        search_entry = ttk.Entry(filter_frame, width=30)
+        search_entry.pack(side='left', padx=5)
+        self.filters[table]["search"] = search_entry
+        
+        ttk.Button(filter_frame, text="Найти", 
+                  command=lambda: self.load_table_data(table)).pack(side='left', padx=5)
+        
+        if table == "mail_items":
             ttk.Label(filter_frame, text="Статус:").pack(side='left', padx=5)
             status_var = tk.StringVar()
             combo = ttk.Combobox(filter_frame, textvariable=status_var, 
@@ -251,11 +213,7 @@ class MainApp:
             weight_to = ttk.Entry(filter_frame, width=8)
             weight_to.pack(side='left', padx=5)
             self.filters[table]["weight_to"] = weight_to
-            
-            self.sort_buttons[table] = ttk.Button(filter_frame, text="Сортировать по весу", 
-                                                  command=lambda: self.toggle_sort(table, "weight"))
-            self.sort_buttons[table].pack(side='left', padx=5)
-
+        
         elif table == "parcels":
             ttk.Label(filter_frame, text="Стоимость от:").pack(side='left', padx=5)
             value_from = ttk.Entry(filter_frame, width=8)
@@ -266,21 +224,8 @@ class MainApp:
             value_to = ttk.Entry(filter_frame, width=8)
             value_to.pack(side='left', padx=5)
             self.filters[table]["value_to"] = value_to
-            
-            self.sort_buttons[table] = ttk.Button(filter_frame, text="Сортировать по стоимости", 
-                                                  command=lambda: self.toggle_sort(table, "value"))
-            self.sort_buttons[table].pack(side='left', padx=5)
-
-    def toggle_sort(self, table, column):
-        """Переключает сортировку по столбцу"""
-        if self.sort_columns.get(table) == column:
-            self.sort_columns[table] = f"{column} DESC"
-        else:
-            self.sort_columns[table] = column
-        self.load_table_data(table)
 
     def reset_filters(self, table):
-        """Сбрасывает фильтры для таблицы"""
         for widget in self.filters[table].values():
             if isinstance(widget, ttk.Entry):
                 widget.delete(0, tk.END)
@@ -288,30 +233,25 @@ class MainApp:
                 widget.set("все")
         self.sort_columns.pop(table, None)
         self.load_table_data(table)
-        if table in self.sort_buttons:
-            self.sort_buttons[table].config(text=f"Сортировать по {table.split('_')[-1]}")
 
     def configure_columns(self, table):
-        """Настраивает колонки для Treeview"""
         tree = self.trees[table]
         tree["show"] = "headings"
         
         if table == "mail_types":
             tree["columns"] = ("id", "type_name", "description")
-            tree.heading("id", text="ID")
-            tree.heading("type_name", text="Тип отправления")
-            tree.heading("description", text="Описание")
+            for col in tree["columns"]:
+                tree.heading(col, text=col.capitalize(), 
+                            command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("type_name", width=150)
             tree.column("description", width=300)
             
         elif table == "recipients":
             tree["columns"] = ("id", "full_name", "address", "phone", "email")
-            tree.heading("id", text="ID")
-            tree.heading("full_name", text="ФИО")
-            tree.heading("address", text="Адрес")
-            tree.heading("phone", text="Телефон")
-            tree.heading("email", text="Email")
+            for col in tree["columns"]:
+                tree.heading(col, text=col.capitalize(), 
+                            command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("full_name", width=150)
             tree.column("address", width=200)
@@ -320,116 +260,80 @@ class MainApp:
             
         elif table == "employees":
             tree["columns"] = ("id", "full_name", "position", "hire_date")
-            tree.heading("id", text="ID")
-            tree.heading("full_name", text="ФИО")
-            tree.heading("position", text="Должность")
-            tree.heading("hire_date", text="Дата приема")
+            for col in tree["columns"]:
+                tree.heading(col, text=col.capitalize(), 
+                            command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("full_name", width=150)
             tree.column("position", width=150)
             tree.column("hire_date", width=100)
             
         elif table == "mail_items":
-            tree["columns"] = ("id", "mail_type", "recipient", "weight", "tariff", "status")
-            tree.heading("id", text="ID")
-            tree.heading("mail_type", text="Тип отправления")
-            tree.heading("recipient", text="Адресат")
-            tree.heading("weight", text="Вес")
-            tree.heading("tariff", text="Тариф")
-            tree.heading("status", text="Статус")
+            tree["columns"] = ("id", "mail_type", "recipient", "weight", "tariff", "status", "accepted_date")
+            for col in tree["columns"]:
+                tree.heading(col, text=col.capitalize(), 
+                            command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("mail_type", width=120)
             tree.column("recipient", width=150)
             tree.column("weight", width=70)
             tree.column("tariff", width=70)
             tree.column("status", width=100)
+            tree.column("accepted_date", width=100)
             
         elif table == "parcels":
             tree["columns"] = ("id", "mail_item", "description", "value")
-            tree.heading("id", text="ID")
-            tree.heading("mail_item", text="Отправление")
-            tree.heading("description", text="Описание")
-            tree.heading("value", text="Стоимость")
+            for col in tree["columns"]:
+                tree.heading(col, text=col.capitalize(), 
+                            command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("mail_item", width=100)
             tree.column("description", width=300)
             tree.column("value", width=100)
 
-    def create_indexes(self):
-        """Создание индексов для ускорения работы"""
-        try:
-            # GIN-индекс для full-text поиска в mail_types.description
-            self.db.cursor.execute("""
-                CREATE EXTENSION IF NOT EXISTS pg_trgm;
-                CREATE INDEX IF NOT EXISTS idx_mail_types_gin_description 
-                ON mail_types USING gin (description gin_trgm_ops);
-            """)
+    def sort_treeview(self, table, column):
+        tree = self.trees[table]
+        
+        if table not in self.sort_direction:
+            self.sort_direction[table] = {}
+        
+        if column not in self.sort_direction[table]:
+            self.sort_direction[table][column] = False
             
-            # B-tree составной индекс для точного поиска в recipients
-            self.db.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_recipients_full_name_address 
-                ON recipients (full_name, address);
-            """)
-            
-            # BRIN-индекс для диапазонного поиска в employees
-            self.db.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_employees_brin_hire_date 
-                ON employees USING brin (hire_date);
-            """)
-            
-            # BRIN-индекс для фильтрации по статусу и дате в mail_items
-            self.db.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_mail_items_brin_status_date 
-                ON mail_items USING brin (accepted_date)
-                WHERE status = 'принято';
-            """)
-            
-            # GIN-индекс для поиска в parcels.description
-            self.db.cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_parcels_gin_description 
-                ON parcels USING gin (to_tsvector('russian', description));
-            """)
-            
-            self.db.connection.commit()
-        except Exception as e:
-            messagebox.showwarning("Индексы", f"Не удалось создать индексы:\n{str(e)}")
+        self.sort_direction[table][column] = not self.sort_direction[table][column]
+        direction = "DESC" if self.sort_direction[table][column] else "ASC"
+        
+        self.sort_columns[table] = f"{column} {direction}"
+        self.load_table_data(table)
+        
+        tree.heading(column, text=column.capitalize() + (" ▼" if direction == "DESC" else " ▲"))
 
     def load_table_data(self, table):
-        """Загружает данные из таблицы в Treeview с учетом фильтров и сортировки"""
         tree = self.trees[table]
         tree.delete(*tree.get_children())
         
         where_clauses = []
         params = []
         
-        if table == "mail_types":
-            if self.filters[table]["type_name"].get():
-                where_clauses.append(f"type_name ILIKE %s")
-                params.append(f"%{self.filters[table]['type_name'].get()}%")
-            query = """
-                SELECT id, type_name, description 
-                FROM mail_types
-            """
-            
-        elif table == "recipients":
-            if self.filters[table]["full_name"].get():
-                where_clauses.append(f"full_name ILIKE %s")
-                params.append(f"%{self.filters[table]['full_name'].get()}%")
-            query = """
-                SELECT id, full_name, address, phone, email 
-                FROM recipients
-            """
-            
-        elif table == "employees":
-            if self.filters[table]["full_name"].get():
-                where_clauses.append(f"full_name ILIKE %s")
-                params.append(f"%{self.filters[table]['full_name'].get()}%")
-            query = """
-                SELECT id, full_name, position, hire_date 
-                FROM employees
-            """
-            
-        elif table == "mail_items":
+        search_text = self.filters[table]["search"].get()
+        if search_text:
+            if table == "mail_types":
+                where_clauses.append("(type_name ILIKE %s OR description ILIKE %s)")
+                params.extend([f"%{search_text}%", f"%{search_text}%"])
+            elif table == "recipients":
+                where_clauses.append("(full_name ILIKE %s OR address ILIKE %s OR email ILIKE %s)")
+                params.extend([f"%{search_text}%", f"%{search_text}%", f"%{search_text}%"])
+            elif table == "employees":
+                where_clauses.append("(full_name ILIKE %s OR position ILIKE %s)")
+                params.extend([f"%{search_text}%", f"%{search_text}%"])
+            elif table == "mail_items":
+                where_clauses.append("(sender_info ILIKE %s OR status ILIKE %s)")
+                params.extend([f"%{search_text}%", f"%{search_text}%"])
+            elif table == "parcels":
+                where_clauses.append("(description ILIKE %s)")
+                params.append(f"%{search_text}%")
+        
+        if table == "mail_items":
             status = self.filters[table]["status"].get()
             weight_from = self.filters[table]["weight_from"].get()
             weight_to = self.filters[table]["weight_to"].get()
@@ -445,7 +349,8 @@ class MainApp:
                 params.append(weight_to)
             
             query = """
-                SELECT mi.id, mt.type_name, r.full_name, mi.weight, mi.tariff, mi.status
+                SELECT mi.id, mt.type_name, r.full_name, mi.weight, mi.tariff, mi.status,
+                       TO_CHAR(mi.accepted_date, 'YYYY-MM-DD')
                 FROM mail_items mi
                 JOIN mail_types mt ON mi.mail_type_id = mt.id
                 JOIN recipients r ON mi.recipient_id = r.id
@@ -468,11 +373,12 @@ class MainApp:
                 JOIN mail_items mi ON p.mail_item_id = mi.id
             """
         
-        # Добавляем условия фильтрации
+        else:
+            query = f"SELECT * FROM {table}"
+        
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
         
-        # Добавляем сортировку
         if table in self.sort_columns and self.sort_columns[table]:
             query += f" ORDER BY {self.sort_columns[table]}"
         
@@ -484,7 +390,6 @@ class MainApp:
             messagebox.showerror("Ошибка", f"Ошибка при загрузке данных из {table}: {str(e)}")
 
     def on_tree_select(self, event):
-        """Обработчик выбора записи в Treeview"""
         tree = event.widget
         table = self.get_current_table()
         if not tree.selection():
@@ -496,13 +401,11 @@ class MainApp:
             self.current_table = table
 
     def get_current_table(self):
-        """Возвращает имя текущей таблицы"""
         current_tab = self.notebook.index(self.notebook.select())
         tables = ["mail_types", "recipients", "employees", "mail_items", "parcels"]
         return tables[current_tab]
 
     def open_edit_window(self, table, edit_mode=False):
-        """Открывает окно редактирования/добавления записи"""
         if edit_mode and not self.current_record_id:
             messagebox.showwarning("Предупреждение", "Выберите запись для редактирования")
             return
@@ -512,66 +415,68 @@ class MainApp:
         window.geometry("500x600")
         window.grab_set()
         
-        # Собираем поля формы
         fields = {}
         lookup_data = {}
         
         if table == "mail_types":
             fields = {
-                "type_name": {"label": "Название типа", "type": "entry"},
-                "description": {"label": "Описание", "type": "entry"}
+                "type_name": {"label": "Название типа*", "type": "entry", "required": True},
+                "description": {"label": "Описание", "type": "entry", "required": False}
             }
                 
         elif table == "recipients":
             fields = {
-                "full_name": {"label": "ФИО", "type": "entry"},
-                "address": {"label": "Адрес", "type": "entry"},
-                "phone": {"label": "Телефон", "type": "entry"},
-                "email": {"label": "Email", "type": "entry"}
+                "full_name": {"label": "ФИО*", "type": "entry", "required": True},
+                "address": {"label": "Адрес*", "type": "entry", "required": True},
+                "phone": {"label": "Телефон", "type": "entry", "required": False},
+                "email": {"label": "Email", "type": "entry", "required": False}
             }
                 
         elif table == "employees":
             fields = {
-                "full_name": {"label": "ФИО", "type": "entry"},
-                "position": {"label": "Должность", "type": "entry"},
-                "hire_date": {"label": "Дата приема (ГГГГ-ММ-ДД)", "type": "entry"}
+                "full_name": {"label": "ФИО*", "type": "entry", "required": True},
+                "position": {"label": "Должность", "type": "entry", "required": False},
+                "hire_date": {"label": "Дата приема (ГГГГ-ММ-ДД)*", "type": "entry", "required": True}
             }
                 
         elif table == "mail_items":
+            mail_types = self.db.get_lookup_data_reverse("mail_types", "type_name")
+            recipients = self.db.get_lookup_data_reverse("recipients", "full_name")
+            employees = self.db.get_lookup_data_reverse("employees", "full_name")
+            
             fields = {
-                "mail_type_id": {"label": "Тип отправления", "type": "combobox", "lookup": "mail_types", "display": "type_name"},
-                "recipient_id": {"label": "Адресат", "type": "combobox", "lookup": "recipients", "display": "full_name"},
-                "sender_info": {"label": "Отправитель", "type": "entry"},
-                "weight": {"label": "Вес", "type": "entry"},
-                "tariff": {"label": "Тариф", "type": "entry"},
-                "accepted_date": {"label": "Дата приема (ГГГГ-ММ-ДД)", "type": "entry"},
-                "accepted_by": {"label": "Принявший сотрудник", "type": "combobox", "lookup": "employees", "display": "full_name"},
-                "status": {"label": "Статус", "type": "combobox", "options": ["принято", "в пути", "доставлено"]}
+                "mail_type_id": {"label": "Тип отправления*", "type": "combobox", "values": list(mail_types.keys()), "required": True},
+                "recipient_id": {"label": "Адресат*", "type": "combobox", "values": list(recipients.keys()), "required": True},
+                "sender_info": {"label": "Отправитель", "type": "entry", "required": False},
+                "weight": {"label": "Вес (кг)*", "type": "entry", "required": True},
+                "accepted_by": {"label": "Принявший сотрудник*", "type": "combobox", "values": list(employees.keys()), "required": True},
+                "status": {"label": "Статус*", "type": "combobox", "values": ["принято", "в пути", "доставлено"], "required": True}
             }
-                
-            # Получаем данные для выпадающих списков
-            for field in fields.values():
-                if "lookup" in field:
-                    lookup_data[field["lookup"]] = self.db.get_lookup_data(field["lookup"], field["display"])
+            
+            lookup_data = {
+                "mail_type_id": mail_types,
+                "recipient_id": recipients,
+                "accepted_by": employees
+            }
                     
         elif table == "parcels":
+            mail_items = self.db.get_lookup_data_reverse("mail_items", "id")
+            
             fields = {
-                "mail_item_id": {"label": "ID отправления", "type": "combobox", "lookup": "mail_items", "display": "id"},
-                "description": {"label": "Описание", "type": "entry"},
-                "value": {"label": "Стоимость", "type": "entry"}
+                "mail_item_id": {"label": "Отправление*", "type": "combobox", "values": list(mail_items.keys()), "required": True},
+                "description": {"label": "Описание*", "type": "entry", "required": True},
+                "value": {"label": "Стоимость*", "type": "entry", "required": True}
             }
-                
-            # Получаем данные для выпадающего списка отправлений
-            self.db.cursor.execute("SELECT id, id FROM mail_items")
-            lookup_data["mail_items"] = {row[1]: row[0] for row in self.db.cursor.fetchall()}
+            
+            lookup_data = {"mail_item_id": mail_items}
         
-        # Создаем элементы формы
         entries = {}
         for field_name, field_config in fields.items():
             frame = ttk.Frame(window)
             frame.pack(fill='x', padx=10, pady=5)
             
-            label = ttk.Label(frame, text=field_config["label"], width=30)
+            label_text = field_config["label"]
+            label = ttk.Label(frame, text=label_text, width=30)
             label.pack(side='left', padx=5)
             
             if field_config["type"] == "entry":
@@ -580,85 +485,90 @@ class MainApp:
                 entries[field_name] = entry
                 
             elif field_config["type"] == "combobox":
-                if "options" in field_config:
-                    combo = ttk.Combobox(frame, values=field_config["options"], state="readonly")
-                else:
-                    lookup = lookup_data[field_config["lookup"]]
-                    combo = ttk.Combobox(frame, values=list(lookup.keys()), state="readonly")
+                combo = ttk.Combobox(frame, values=field_config["values"], state="readonly")
                 combo.pack(side='right', fill='x', expand=True, padx=5)
-                entries[field_name] = (combo, field_config.get("lookup"))
+                entries[field_name] = combo
         
-        # Заполняем форму данными при редактировании
         if edit_mode:
-            self.db.cursor.execute(f"SELECT * FROM {table} WHERE id = %s", (self.current_record_id,))
-            record = self.db.cursor.fetchone()
-            colnames = [desc[0] for desc in self.db.cursor.description]
-            
-            for i, colname in enumerate(colnames):
-                if colname in entries:
-                    if isinstance(entries[colname], tuple):  # Combobox
-                        combo, lookup_table = entries[colname]
-                        if lookup_table:
-                            lookup = lookup_data[lookup_table]
-                            reverse_lookup = {v: k for k, v in lookup.items()}
-                            if record[i] in reverse_lookup:
-                                combo.set(reverse_lookup[record[i]])
+            try:
+                self.db.cursor.execute(f"SELECT * FROM {table} WHERE id = %s", (self.current_record_id,))
+                record = self.db.cursor.fetchone()
+                colnames = [desc[0] for desc in self.db.cursor.description]
+                
+                for i, colname in enumerate(colnames):
+                    if colname in entries:
+                        value = record[i]
+                        if value is None:
+                            continue
+                            
+                        if isinstance(entries[colname], ttk.Combobox):
+                            if colname in lookup_data:
+                                for display_value, id_value in lookup_data[colname].items():
+                                    if id_value == value:
+                                        entries[colname].set(display_value)
+                                        break
+                            else:
+                                entries[colname].set(str(value))
                         else:
-                            combo.set(record[i])
-                    else:  # Entry
-                        entries[colname].delete(0, tk.END)
-                        entries[colname].insert(0, str(record[i]))
+                            entries[colname].delete(0, tk.END)
+                            entries[colname].insert(0, str(value))
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось загрузить данные для редактирования:\n{str(e)}")
+                window.destroy()
+                return
         
-        # Кнопки сохранения
         button_frame = ttk.Frame(window)
         button_frame.pack(fill='x', padx=10, pady=10)
         
         ttk.Button(button_frame, text="Отмена", command=window.destroy).pack(side='right', padx=5)
         ttk.Button(button_frame, text="Сохранить", 
-                  command=lambda: self.save_record(table, entries, edit_mode, window)).pack(side='right', padx=5)
+                  command=lambda: self.save_record(table, fields, entries, lookup_data, edit_mode, window)).pack(side='right', padx=5)
 
-    def save_record(self, table, entries, edit_mode, window):
-        """Сохраняет запись в базе данных"""
+    def save_record(self, table, fields, entries, lookup_data, edit_mode, window):
         data = {}
-        lookup_data = {}
+        errors = []
         
-        # Собираем данные из формы
         for field_name, widget in entries.items():
             try:
-                if isinstance(widget, tuple):  # Combobox
-                    combo, lookup_table = widget
-                    value = combo.get()
+                if isinstance(widget, ttk.Combobox):
+                    value = widget.get()
                     
-                    if not value:
-                        raise ValueError(f"Поле '{combo.master.children['!label'].cget('text')}' обязательно для заполнения")
+                    if fields[field_name]["required"] and not value:
+                        errors.append(f"Поле '{fields[field_name]['label']}' обязательно для заполнения")
+                        continue
                     
-                    if lookup_table:
-                        if lookup_table not in lookup_data:
-                            lookup_data[lookup_table] = self.db.get_lookup_data(lookup_table, "id")
-                        
-                        if value not in lookup_data[lookup_table]:
-                            raise ValueError(f"Некорректное значение для {field_name}")
-                        
-                        data[field_name] = lookup_data[lookup_table][value]
+                    if field_name in lookup_data:
+                        if value in lookup_data[field_name]:
+                            data[field_name] = lookup_data[field_name][value]
+                        else:
+                            errors.append(f"Некорректное значение для '{fields[field_name]['label']}'")
+                    else:
+                        data[field_name] = value
+                    
+                else:
+                    value = widget.get().strip()
+                    
+                    if fields[field_name]["required"] and not value:
+                        errors.append(f"Поле '{fields[field_name]['label']}' обязательно для заполнения")
+                        continue
+                    
+                    if field_name in ["weight", "tariff", "value"] and value:
+                        try:
+                            data[field_name] = float(value)
+                        except ValueError:
+                            errors.append(f"Некорректное числовое значение для '{fields[field_name]['label']}'")
                     else:
                         data[field_name] = value
                         
-                else:  # Entry
-                    value = widget.get().strip()
-                    label = widget.master.children['!label'].cget('text')
-                    
-                    if not value:
-                        raise ValueError(f"Поле '{label}' обязательно для заполнения")
-                    
-                    if field_name in ["weight", "tariff", "value"]:
-                        float(value)
-                    elif field_name in ["hire_date", "accepted_date"]:
-                        datetime.strptime(value, "%Y-%m-%d")
-                    data[field_name] = value
-                    
-            except ValueError as e:
-                messagebox.showerror("Ошибка", str(e))
-                return
+            except Exception as e:
+                errors.append(f"Ошибка обработки поля '{fields[field_name]['label']}': {str(e)}")
+        
+        if errors:
+            messagebox.showerror("Ошибки ввода", "\n".join(errors))
+            return
+        
+        if table == "mail_items" and not edit_mode:
+            data["accepted_date"] = datetime.now().date()
         
         try:
             if edit_mode:
@@ -677,7 +587,6 @@ class MainApp:
             messagebox.showerror("Ошибка", f"Не удалось сохранить данные:\n{str(e)}")
 
     def delete_record(self, table):
-        """Удаляет выбранную запись"""
         if not self.current_record_id:
             messagebox.showwarning("Предупреждение", "Выберите запись для удаления")
             return
