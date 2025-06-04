@@ -44,6 +44,19 @@ class Database:
             messagebox.showerror("Ошибка справочника", f"Ошибка при получении данных из справочника {table}:\n{str(e)}")
             return {}
 
+    def get_mail_items_for_parcels(self):
+        """Специальный метод для получения отправлений для вложений"""
+        try:
+            self.cursor.execute("""
+                SELECT mi.id, mi.status, r.full_name 
+                FROM mail_items mi
+                JOIN recipients r ON mi.recipient_id = r.id
+            """)
+            return {f"Отправление №{row[0]} [{row[1]}] ({row[2]})": row[0] for row in self.cursor.fetchall()}
+        except Exception as e:
+            messagebox.showerror("Ошибка справочника", f"Ошибка при получении отправлений:\n{str(e)}")
+            return {}
+
     def insert_data(self, table, data):
         try:
             columns = list(data.keys())
@@ -130,6 +143,7 @@ class MainApp:
         self.trees = {}
         self.filters_frame = {}
         
+        # Таблицы с русскими названиями
         tables = [
             ("mail_types", "Типы отправлений"),
             ("recipients", "Адресаты"),
@@ -238,10 +252,48 @@ class MainApp:
         tree = self.trees[table]
         tree["show"] = "headings"
         
+        # Словари с русскими названиями столбцов
+        russian_headers = {
+            "mail_types": {
+                "id": "ID",
+                "type_name": "Тип отправления",
+                "description": "Описание"
+            },
+            "recipients": {
+                "id": "ID",
+                "full_name": "ФИО",
+                "address": "Адрес",
+                "phone": "Телефон",
+                "email": "Email"
+            },
+            "employees": {
+                "id": "ID",
+                "full_name": "ФИО",
+                "position": "Должность",
+                "hire_date": "Дата приема"
+            },
+            "mail_items": {
+                "id": "ID",
+                "mail_type": "Тип отправления",
+                "recipient": "Адресат",
+                "weight": "Вес (кг)",
+                "tariff": "Тариф",
+                "status": "Статус",
+                "accepted_date": "Дата приема"
+            },
+            "parcels": {
+                "id": "ID",
+                "mail_item": "Отправление",
+                "description": "Описание",
+                "value": "Стоимость"
+            }
+        }
+        
         if table == "mail_types":
             tree["columns"] = ("id", "type_name", "description")
             for col in tree["columns"]:
-                tree.heading(col, text=col.capitalize(), 
+                text = russian_headers[table].get(col, col)
+                tree.heading(col, text=text, 
                             command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("type_name", width=150)
@@ -250,7 +302,8 @@ class MainApp:
         elif table == "recipients":
             tree["columns"] = ("id", "full_name", "address", "phone", "email")
             for col in tree["columns"]:
-                tree.heading(col, text=col.capitalize(), 
+                text = russian_headers[table].get(col, col)
+                tree.heading(col, text=text, 
                             command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("full_name", width=150)
@@ -261,7 +314,8 @@ class MainApp:
         elif table == "employees":
             tree["columns"] = ("id", "full_name", "position", "hire_date")
             for col in tree["columns"]:
-                tree.heading(col, text=col.capitalize(), 
+                text = russian_headers[table].get(col, col)
+                tree.heading(col, text=text, 
                             command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("full_name", width=150)
@@ -271,7 +325,8 @@ class MainApp:
         elif table == "mail_items":
             tree["columns"] = ("id", "mail_type", "recipient", "weight", "tariff", "status", "accepted_date")
             for col in tree["columns"]:
-                tree.heading(col, text=col.capitalize(), 
+                text = russian_headers[table].get(col, col)
+                tree.heading(col, text=text, 
                             command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
             tree.column("mail_type", width=120)
@@ -284,10 +339,11 @@ class MainApp:
         elif table == "parcels":
             tree["columns"] = ("id", "mail_item", "description", "value")
             for col in tree["columns"]:
-                tree.heading(col, text=col.capitalize(), 
+                text = russian_headers[table].get(col, col)
+                tree.heading(col, text=text, 
                             command=lambda c=col: self.sort_treeview(table, c))
             tree.column("id", width=50, anchor=tk.CENTER)
-            tree.column("mail_item", width=100)
+            tree.column("mail_item", width=200)
             tree.column("description", width=300)
             tree.column("value", width=100)
 
@@ -306,7 +362,18 @@ class MainApp:
         self.sort_columns[table] = f"{column} {direction}"
         self.load_table_data(table)
         
-        tree.heading(column, text=column.capitalize() + (" ▼" if direction == "DESC" else " ▲"))
+        # Обновляем заголовок с учетом направления сортировки
+        russian_headers = {
+            "mail_types": {"id": "ID", "type_name": "Тип отправления", "description": "Описание"},
+            "recipients": {"id": "ID", "full_name": "ФИО", "address": "Адрес", "phone": "Телефон", "email": "Email"},
+            "employees": {"id": "ID", "full_name": "ФИО", "position": "Должность", "hire_date": "Дата приема"},
+            "mail_items": {"id": "ID", "mail_type": "Тип отправления", "recipient": "Адресат", "weight": "Вес (кг)", 
+                          "tariff": "Тариф", "status": "Статус", "accepted_date": "Дата приема"},
+            "parcels": {"id": "ID", "mail_item": "Отправление", "description": "Описание", "value": "Стоимость"}
+        }
+        
+        base_text = russian_headers[table].get(column, column)
+        tree.heading(column, text=base_text + (" ▼" if direction == "DESC" else " ▲"))
 
     def load_table_data(self, table):
         tree = self.trees[table]
@@ -367,10 +434,14 @@ class MainApp:
                 where_clauses.append("value <= %s")
                 params.append(value_to)
             
+            # Форматируем информацию об отправлении
             query = """
-                SELECT p.id, mi.id, p.description, p.value
+                SELECT p.id, 
+                       'Отпр. ' || mi.id || ' [' || mi.status || '] (' || r.full_name || ')' as mail_item_info,
+                       p.description, p.value
                 FROM parcels p
                 JOIN mail_items mi ON p.mail_item_id = mi.id
+                JOIN recipients r ON mi.recipient_id = r.id
             """
         
         else:
@@ -460,7 +531,8 @@ class MainApp:
             }
                     
         elif table == "parcels":
-            mail_items = self.db.get_lookup_data_reverse("mail_items", "id")
+            # Используем специальный метод для получения отправлений
+            mail_items = self.db.get_mail_items_for_parcels()
             
             fields = {
                 "mail_item_id": {"label": "Отправление*", "type": "combobox", "values": list(mail_items.keys()), "required": True},
@@ -503,6 +575,12 @@ class MainApp:
                             
                         if isinstance(entries[colname], ttk.Combobox):
                             if colname in lookup_data:
+                                # Для статуса в отправлениях устанавливаем значение напрямую
+                                if table == "mail_items" and colname == "status":
+                                    entries[colname].set(value)
+                                    continue
+                                    
+                                # Поиск отображаемого значения по ID
                                 for display_value, id_value in lookup_data[colname].items():
                                     if id_value == value:
                                         entries[colname].set(display_value)
@@ -537,6 +615,11 @@ class MainApp:
                         errors.append(f"Поле '{fields[field_name]['label']}' обязательно для заполнения")
                         continue
                     
+                    # Для статуса в отправлениях сохраняем значение напрямую
+                    if table == "mail_items" and field_name == "status":
+                        data[field_name] = value
+                        continue
+                        
                     if field_name in lookup_data:
                         if value in lookup_data[field_name]:
                             data[field_name] = lookup_data[field_name][value]
