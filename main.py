@@ -43,7 +43,6 @@ class Database:
             return {}
 
     def get_mail_items_for_parcels(self):
-        """Специальный метод для получения отправлений для вложений"""
         try:
             self.cursor.execute("""
                 SELECT mi.id, mi.status, r.full_name 
@@ -266,7 +265,7 @@ class MainApp:
                 "id": "ID",
                 "full_name": "ФИО",
                 "position": "Должность",
-                "hire_date": "Дата приема"
+                "hire_date": "Дата трудоустройства"
             },
             "mail_items": {
                 "id": "ID",
